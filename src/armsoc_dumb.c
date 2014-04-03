@@ -60,7 +60,16 @@ struct armsoc_bo {
 	 */
 	uint32_t original_size;
 	uint32_t name;
+
+	/* pending deletions list */
+	struct xorg_list entry;
 };
+
+/* Mali sometimes asks us to destroy BOs for windows before it has finished
+ * reading from them. To work around this, we don't free BOs immediately,
+ * instead we put them on a list to be deleted at a later moment when we are
+ * more confident that rendering has finished. */
+static struct xorg_list pending_deletions;
 
 /* device related functions:
  */
@@ -76,6 +85,7 @@ struct armsoc_device *armsoc_device_new(int fd,
 	new_dev->fd = fd;
 	new_dev->create_custom_gem = create_custom_gem;
 	new_dev->alpha_supported = TRUE;
+	xorg_list_init(&pending_deletions);
 	return new_dev;
 }
 
@@ -200,6 +210,17 @@ static void armsoc_bo_del(struct armsoc_bo *bo)
 	free(bo);
 }
 
+void armsoc_bo_do_pending_deletions(void)
+{
+	struct armsoc_bo *bo;
+
+	xorg_list_for_each_entry(bo, &pending_deletions, entry)
+		armsoc_bo_del(bo);
+
+	/* set list to empty */
+	xorg_list_del(&pending_deletions);
+}
+
 void armsoc_bo_unreference(struct armsoc_bo *bo)
 {
 	if (!bo)
@@ -207,7 +228,7 @@ void armsoc_bo_unreference(struct armsoc_bo *bo)
 
 	assert(bo->refcnt > 0);
 	if (--bo->refcnt == 0)
-		armsoc_bo_del(bo);
+		xorg_list_add(&bo->entry, &pending_deletions);
 }
 
 void armsoc_bo_reference(struct armsoc_bo *bo)
