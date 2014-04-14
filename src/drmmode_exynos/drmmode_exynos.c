@@ -90,7 +90,11 @@ static int create_custom_gem(int fd, struct armsoc_create_gem *create_gem)
 	 * When they are supported all allocations are effectively contiguous
 	 * anyway, so for simplicity we always request non contiguous buffers.
 	 */
-	create_exynos.flags = EXYNOS_BO_NONCONTIG | EXYNOS_BO_WC;
+	create_exynos.flags = EXYNOS_BO_NONCONTIG;
+	if (create_gem->buf_type == ARMSOC_BO_SCANOUT)
+		create_exynos.flags |= EXYNOS_BO_WC;
+	else
+		create_exynos.flags |= EXYNOS_BO_CACHABLE;
 
 	ret = drmIoctl(fd, DRM_IOCTL_EXYNOS_GEM_CREATE, &create_exynos);
 	if (ret)
