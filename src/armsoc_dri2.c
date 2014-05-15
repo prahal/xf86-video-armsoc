@@ -877,18 +877,18 @@ ARMSOCDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 			WARNING_MSG("Flip is called too fast\n");
 		pARMSOC->swap_chain[idx] = cmd;
 
+		/* TODO: MIDEGL-1461: Handle rollback if multiple CRTC flip is
+		 * only partially successful
+		 */
+		pARMSOC->pending_flips++;
+		ret = drmmode_page_flip(pDraw, src_fb_id, cmd);
+
 		/* Mali sometimes asks us to destroy DRI2 buffers for windows before
 		 * it has finished reading from them, so we don't free unused BOs
 		 * immediately. Here at ScheduleSwap time we seem to have a reliable
 		 * indication that Mali has finished drawing the scene, so we go ahead
 		 * and process all pending BO deletions. */
 		armsoc_bo_do_pending_deletions();
-
-		/* TODO: MIDEGL-1461: Handle rollback if multiple CRTC flip is
-		 * only partially successful
-		 */
-		pARMSOC->pending_flips++;
-		ret = drmmode_page_flip(pDraw, src_fb_id, cmd);
 
 		/* If using page flip events, we'll trigger an immediate
 		 * completion in the case that no CRTCs were enabled to be
