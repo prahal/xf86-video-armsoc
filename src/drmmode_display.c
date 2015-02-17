@@ -336,7 +336,8 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	}
 
 	/* Set the new mode: */
-	crtc->mode = *mode;
+	if (&crtc->mode != mode)
+		crtc->mode = *mode;
 	crtc->x = x;
 	crtc->y = y;
 	crtc->rotation = rotation;
