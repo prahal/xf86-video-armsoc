@@ -314,6 +314,8 @@ void *armsoc_bo_map(struct armsoc_bo *bo)
 		int res;
 
 		map_dumb.handle = bo->handle;
+		map_dumb.pad = 0;
+		map_dumb.offset = 0;
 
 		res = drmIoctl(bo->dev->fd, DRM_IOCTL_MODE_MAP_DUMB, &map_dumb);
 		if (res)
