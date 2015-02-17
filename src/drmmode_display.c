@@ -740,9 +740,12 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 		return FALSE;
 	}
 
+	memset(&handles, 0, 4 * sizeof(handles[0]));
+	memset(&pitches, 0, 4 * sizeof(pitches[0]));
+	memset(&offsets, 0, 4 * sizeof(offsets[0]));
+
 	handles[0] = armsoc_bo_handle(cursor->bo);
 	pitches[0] = armsoc_bo_pitch(cursor->bo);
-	offsets[0] = 0;
 
 	/* allow for cursor padding in the fb */
 	if (drmModeAddFB2(drmmode->fd, w + 2 * pad, h, DRM_FORMAT_ARGB8888,
