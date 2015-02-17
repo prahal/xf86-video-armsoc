@@ -99,6 +99,7 @@ int armsoc_bo_set_dmabuf(struct armsoc_bo *bo)
 	/* Try to get dma_buf fd */
 	prime_handle.handle = bo->handle;
 	prime_handle.flags  = 0;
+	prime_handle.fd  = 0;
 	res  = drmIoctl(bo->dev->fd, DRM_IOCTL_PRIME_HANDLE_TO_FD,
 						&prime_handle);
 	if (res)
