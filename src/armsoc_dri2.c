@@ -736,10 +736,9 @@ ARMSOCDRI2SwapComplete(struct ARMSOCDRISwapCmd *cmd)
 		/* Free the swap cmd and remove it from the swap chain. */
 		idx = cmd->swap_id % pARMSOC->swap_chain_size;
 		assert(pARMSOC->swap_chain[idx] == cmd);
+		free(cmd);
 		pARMSOC->swap_chain[idx] = NULL;
 	}
-	free(cmd);
-	pARMSOC->swap_chain[idx] = NULL;
 }
 
 /**
