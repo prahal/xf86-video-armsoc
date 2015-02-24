@@ -758,7 +758,7 @@ ARMSOCPreInit(ScrnInfoPtr pScrn, int flags)
 
 	pScrn->monitor = pScrn->confScreen->monitor;
 
-	/* Get the current color depth & bpp, and set it for XFree86: */
+	/* Get the current depth, and set it for XFree86: */
 	default_depth = 24;  /* TODO: MIDEGL-1445: get from kernel */
 	fbbpp = 32;          /* TODO: MIDEGL-1445: get from kernel */
 
@@ -878,7 +878,7 @@ ARMSOCPreInit(ScrnInfoPtr pScrn, int flags)
 	/* Let XFree86 calculate or get (from command line) the display DPI: */
 	xf86SetDpi(pScrn, 0, 0);
 
-	/* Ensure we have a supported bitsPerPixel: */
+	/* Ensure we have a supported depth: */
 	switch (pScrn->bitsPerPixel) {
 	case 16:
 	case 24:
@@ -891,7 +891,9 @@ ARMSOCPreInit(ScrnInfoPtr pScrn, int flags)
 		goto fail2;
 	}
 
+
 	/* Load external sub-modules now: */
+
 	if (!(xf86LoadSubModule(pScrn, "dri2") &&
 			xf86LoadSubModule(pScrn, "exa") &&
 			xf86LoadSubModule(pScrn, "fb"))) {
@@ -948,7 +950,6 @@ ARMSOCScreenInit(SCREEN_INIT_ARGS_DECL)
 	xf86CrtcConfigPtr xf86_config;
 	int j;
 	const char *fbdev;
-	int depth;
 
 	TRACE_ENTER();
 
@@ -959,24 +960,13 @@ ARMSOCScreenInit(SCREEN_INIT_ARGS_DECL)
 		ERROR_MSG("Cannot get DRM master: %s", strerror(errno));
 		goto fail;
 	}
-
-	/* We create a single visual with the depth set to the
-	 * screen's bpp as otherwise XComposite will add an alternate
-	 * visual and ARGB8888 windows will be implicitly redirected.
-	 * The initial scanout buffer is created with the same depth
-	 * to match the visual.
-	 */
-	//depth = pScrn->bitsPerPixel;
-	depth = pScrn->depth;
-
-	/* Allocate initial scanout buffer.*/
-	DEBUG_MSG("allocating new scanout buffer: %dx%d %d %d",
-			pScrn->virtualX, pScrn->virtualY,
-			depth, pScrn->bitsPerPixel);
+	/* Allocate initial scanout buffer */
+	DEBUG_MSG("allocating new scanout buffer: %dx%d",
+			pScrn->virtualX, pScrn->virtualY);
 	assert(!pARMSOC->scanout);
 	/* Screen creates and takes a ref on the scanout bo */
 	pARMSOC->scanout = armsoc_bo_new_with_dim(pARMSOC->dev, pScrn->virtualX,
-			pScrn->virtualY, depth, pScrn->bitsPerPixel,
+			pScrn->virtualY, pScrn->depth, pScrn->bitsPerPixel,
 			ARMSOC_BO_SCANOUT);
 	if (!pARMSOC->scanout) {
 		ERROR_MSG("Cannot allocate scanout buffer\n");
@@ -1006,19 +996,17 @@ ARMSOCScreenInit(SCREEN_INIT_ARGS_DECL)
 
 	/* Reset the visual list. */
 	miClearVisualTypes();
-
 	if (!miSetVisualTypes(pScrn->bitsPerPixel,
-			miGetDefaultVisualMask(depth),
+			miGetDefaultVisualMask(pScrn->depth),
 			pScrn->rgbBits, pScrn->defaultVisual)) {
 		ERROR_MSG(
-				"Cannot initialize the visual type for %d depth, %d bits per pixel!",
-				depth,
+				"Cannot initialize the visual type for %d bits per pixel!",
 				pScrn->bitsPerPixel);
 		goto fail2;
 	}
 
 	if (pScrn->bitsPerPixel == 32 && pScrn->depth == 24) {
-		// Also add a 24 bit depth visual 
+		/* Also add a 24 bit depth visual */
 		if (!miSetVisualTypes(24, miGetDefaultVisualMask(pScrn->depth),
 				pScrn->rgbBits, pScrn->defaultVisual)) {
 			WARNING_MSG(
