@@ -107,6 +107,7 @@ CreateNoAccelPixmap(struct ARMSOCPixmapPrivRec *priv, ScreenPtr pScreen, int wid
 			free(priv);
 			return NULL;
 		}
+		memset(priv->unaccel, 0, datasize);
 		priv->unaccel_size = datasize;
 		*new_fb_pitch = pitch;
 	}
@@ -267,6 +268,7 @@ ModifyUnAccelPixmapHeader(struct ARMSOCPixmapPrivRec *priv, PixmapPtr pPixmap, i
 			priv->unaccel_size = 0;
 			return FALSE;
 		}
+		memset(priv->unaccel, 0, datasize);
 		priv->unaccel_size = datasize;
 	}
 
