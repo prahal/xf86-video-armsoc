@@ -148,10 +148,12 @@ struct armsoc_bo *armsoc_bo_new_with_dim(struct armsoc_device *dev,
 	if (!new_buf)
 		return NULL;
 
+	memset(new_buf, 0, sizeof(*new_buf));
 	create_gem.buf_type = buf_type;
 	create_gem.height = height;
 	create_gem.width = width;
 	create_gem.bpp = bpp;
+	create_gem.size = 0;
 	res = dev->create_custom_gem(dev->fd, &create_gem);
 	if (res) {
 		free(new_buf);
