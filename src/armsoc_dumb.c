@@ -140,7 +140,7 @@ struct armsoc_bo *armsoc_bo_new_with_dim(struct armsoc_device *dev,
 			uint32_t width, uint32_t height, uint8_t depth,
 			uint8_t bpp, enum armsoc_buf_type buf_type)
 {
-	struct armsoc_create_gem create_gem;
+	struct armsoc_create_gem create_gem = {0};
 	struct armsoc_bo *new_buf;
 	int res;
 
@@ -153,7 +153,6 @@ struct armsoc_bo *armsoc_bo_new_with_dim(struct armsoc_device *dev,
 	create_gem.height = height;
 	create_gem.width = width;
 	create_gem.bpp = bpp;
-	create_gem.size = 0;
 	res = dev->create_custom_gem(dev->fd, &create_gem);
 	if (res) {
 		free(new_buf);
