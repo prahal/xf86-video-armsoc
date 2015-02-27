@@ -33,6 +33,28 @@
 
 #include "armsoc_dumb.h"
 #include "drmmode_driver.h"
+#include "drm_fourcc.h"
+
+ #include <stdio.h>
+#include <stdlib.h>
+#include <execinfo.h>
+
+static void stack_trace(void)
+{
+  void *trace[16];
+  char **messages = (char **)NULL;
+  int i, trace_size = 0;
+
+  trace_size = backtrace(trace, 16);
+  messages = backtrace_symbols(trace, trace_size);
+  xf86DrvMsg(-1, X_WARNING, "[stack trace]>>>\n");
+  for (i=0; i < trace_size; i++)
+    xf86DrvMsg(-1, X_WARNING, "%s\n", messages[i]);
+  xf86DrvMsg(-1, X_WARNING, "<<<[stack trace]\n");
+  free(messages);
+}
+
+
 
 #define ALIGN(val, align)	(((val) + (align) - 1) & ~((align) - 1))
 
@@ -275,6 +297,12 @@ uint32_t armsoc_bo_bpp(struct armsoc_bo *bo)
 	return bo->bpp;
 }
 
+uint32_t armsoc_bo_depth(struct armsoc_bo *bo)
+{
+	assert(bo->refcnt > 0);
+	return bo->depth;
+}
+
 uint32_t armsoc_bo_pitch(struct armsoc_bo *bo)
 {
 	assert(bo->refcnt > 0);
@@ -345,15 +373,37 @@ int armsoc_bo_cpu_fini(struct armsoc_bo *bo, enum armsoc_gem_op op)
 int armsoc_bo_add_fb(struct armsoc_bo *bo)
 {
 	int ret, depth = bo->depth;
+	uint32_t handles[4], pitches[4], offsets[4]; /* we only use [0] */
+	uint32_t pixel_format = DRM_FORMAT_ARGB8888;
 
 	assert(bo->refcnt > 0);
 	assert(bo->fb_id == 0);
 
+	if (bo->bpp == 16) {
+	       if(bo->depth == 15)
+		       pixel_format = DRM_FORMAT_ARGB1555;
+	       else
+		       pixel_format = DRM_FORMAT_ARGB4444;
+	}
+
 	if (bo->bpp == 32 && bo->depth == 32 && !bo->dev->alpha_supported)
 		depth = 24;
 
-	ret = drmModeAddFB(bo->dev->fd, bo->width, bo->height, depth,
-		bo->bpp, bo->pitch, bo->handle, &bo->fb_id);
+	xf86DrvMsg(-1, X_WARNING, "%s alpha supported ? %d request bpp %d , requested depth %d, using depth %d\n", __func__, bo->dev->alpha_supported, bo->bpp, bo->depth, depth);
+	stack_trace();
+
+	memset(&handles, 0, 4 * sizeof(handles[0]));
+	memset(&pitches, 0, 4 * sizeof(pitches[0]));
+	memset(&offsets, 0, 4 * sizeof(offsets[0]));
+
+	handles[0] = bo->handle;
+	pitches[0] = bo->pitch;
+
+	ret = drmModeAddFB2(bo->dev->fd, bo->width, bo->height, pixel_format,
+		handles, pitches, offsets, &bo->fb_id, 0);
+	if (ret < 0)
+		xf86DrvMsg(-1, X_ERROR, "HW cursor: drmModeAddFB2 failed: %s",
+					strerror(errno));
 
 	if (ret < 0 && bo->bpp == 32 && bo->depth == 32 && bo->dev->alpha_supported) {
 		/* The DRM driver may not support an alpha channel but

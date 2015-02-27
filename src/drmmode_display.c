@@ -598,6 +598,7 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 	drmModePlane *ovr;
 	int w, h, pad;
 	uint32_t handles[4], pitches[4], offsets[4]; /* we only use [0] */
+	uint32_t pixel_format = DRM_FORMAT_ARGB8888;
 
 	if (drmmode->cursor) {
 		INFO_MSG("cursor already initialized");
@@ -676,9 +677,16 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 
 	handles[0] = armsoc_bo_handle(cursor->bo);
 	pitches[0] = armsoc_bo_pitch(cursor->bo);
+	if (armsoc_bo_bpp(cursor->bo) == 16) {
+	       if(armsoc_bo_depth(cursor->bo) == 15)
+		       pixel_format = DRM_FORMAT_ARGB1555;
+	       else
+		       pixel_format = DRM_FORMAT_ARGB4444;
+	}
+
 
 	/* allow for cursor padding in the fb */
-	if (drmModeAddFB2(drmmode->fd, w + 2 * pad, h, DRM_FORMAT_ARGB8888,
+	if (drmModeAddFB2(drmmode->fd, w + 2 * pad, h, pixel_format,
 			handles, pitches, offsets, &cursor->fb_id, 0)) {
 		ERROR_MSG("HW cursor: drmModeAddFB2 failed: %s",
 					strerror(errno));
