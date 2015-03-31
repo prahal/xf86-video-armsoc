@@ -780,6 +780,63 @@ ARMSOCDRI2SwapComplete(struct ARMSOCDRISwapCmd *cmd)
 	free(cmd);
 }
 
+static void ARMSOCDRI2ExecuteSwap(struct ARMSOCDRISwapCmd *cmd)
+{
+	int status;
+	DrawablePtr pDraw = NULL;
+	ScreenPtr pScreen;
+	ScrnInfoPtr pScrn;
+
+	status = dixLookupDrawable(&pDraw, cmd->draw_id, serverClient,
+				   M_ANY, DixWriteAccess);
+	if (status != Success) {
+		ARMSOCDRI2SwapComplete(cmd);
+		return;
+	}
+	pScreen = pDraw->pScreen;
+	pScrn = xf86ScreenToScrn(pScreen);
+
+	if (canexchange(pDraw, cmd->old_src_bo, cmd->old_dst_bo)) {
+		PixmapPtr pDstPixmap = draw2pix(dri2draw(pDraw, cmd->pDstBuffer));
+		RegionRec region;
+
+		exchangebufs(pDraw, cmd->pSrcBuffer, cmd->pDstBuffer);
+		if (cmd->pSrcBuffer->attachment == DRI2BufferBackLeft)
+			nextBuffer(pDraw, ARMSOCBUF(cmd->pSrcBuffer));
+
+		region.extents.x1 = region.extents.y1 = 0;
+		region.extents.x2 = pDstPixmap->drawable.width;
+		region.extents.y2 = pDstPixmap->drawable.height;
+		region.data = NULL;
+		DamageRegionAppend(&pDstPixmap->drawable, &region);
+		DamageRegionProcessPending(&pDstPixmap->drawable);
+
+		cmd->type = DRI2_EXCHANGE_COMPLETE;
+		ARMSOCDRI2SwapComplete(cmd);
+	} else {
+		/* fallback to blit: */
+		BoxRec box = {
+				.x1 = 0,
+				.y1 = 0,
+				.x2 = pDraw->width,
+				.y2 = pDraw->height,
+		};
+		RegionRec region;
+
+		DEBUG_MSG("BLITTING");
+		RegionInit(&region, &box, 0);
+		ARMSOCDRI2CopyRegion(pDraw, &region, cmd->pDstBuffer, cmd->pSrcBuffer);
+		cmd->type = DRI2_BLIT_COMPLETE;
+		ARMSOCDRI2SwapComplete(cmd);
+	}
+}
+
+void ARMSOCDRI2VBlankHandler(unsigned int sequence, unsigned int tv_sec, unsigned int tv_usec, void *user_data)
+{
+	struct ARMSOCDRISwapCmd *cmd = user_data;
+	ARMSOCDRI2ExecuteSwap(cmd);
+}
+
 /**
  * ScheduleSwap is responsible for requesting a DRM vblank event for the
  * appropriate frame.
@@ -806,7 +863,6 @@ ARMSOCDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	int src_fb_id, dst_fb_id;
 	int ret, do_flip;
 	unsigned int idx;
-	PixmapPtr pDstPixmap = draw2pix(dri2draw(pDraw, pDstBuffer));
 
 	cmd = calloc(1, sizeof(*cmd));
 	if (!cmd)
@@ -940,45 +996,25 @@ ARMSOCDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 			if (cmd->swapCount == 0)
 				ARMSOCDRI2SwapComplete(cmd);
 		}
-	} else if (canexchange(pDraw, src_bo, dst_bo)) {
-		RegionRec region;
-
-		exchangebufs(pDraw, pSrcBuffer, pDstBuffer);
-		if (pSrcBuffer->attachment == DRI2BufferBackLeft)
-			nextBuffer(pDraw, ARMSOCBUF(pSrcBuffer));
-
-		region.extents.x1 = region.extents.y1 = 0;
-		region.extents.x2 = pDstPixmap->drawable.width;
-		region.extents.y2 = pDstPixmap->drawable.height;
-		region.data = NULL;
-		DamageRegionAppend(&pDstPixmap->drawable, &region);
-		DamageRegionProcessPending(&pDstPixmap->drawable);
-
-		cmd->type = DRI2_EXCHANGE_COMPLETE;
-		ARMSOCDRI2SwapComplete(cmd);
 	} else {
-		/* fallback to blit: */
-		BoxRec box = {
-				.x1 = 0,
-				.y1 = 0,
-				.x2 = pDraw->width,
-				.y2 = pDraw->height,
-		};
-		RegionRec region;
+		drmVBlank vbl = { };
 
-		DEBUG_MSG("BLITTING");
-		RegionInit(&region, &box, 0);
-		ARMSOCDRI2CopyRegion(pDraw, &region, pDstBuffer, pSrcBuffer);
-		cmd->type = DRI2_BLIT_COMPLETE;
-		cmd->new_scanout = boFromBuffer(pDstBuffer);
-		ARMSOCDRI2SwapComplete(cmd);
+		/* If we're not page flipping, delay the swap until
+		 * vblank time ourselves. */
+		vbl.request.type = (DRM_VBLANK_ABSOLUTE | DRM_VBLANK_EVENT);
+		vbl.request.sequence = *target_msc;
+		vbl.request.signal = (unsigned long) cmd;
+
+
+		ret = drmWaitVBlank(pARMSOC->drmFD, &vbl);
+		if (ret) {
+			/* Oops, we couldn't schedule the swap for vblank.
+			 * Just do it immediately. */
+			ARMSOCDRI2ExecuteSwap(cmd);
+		}
 	}
 
 	return TRUE;
-}
-
-void ARMSOCDRI2VBlankHandler(unsigned int sequence, unsigned int tv_sec, unsigned int tv_usec, void *user_data)
-{
 }
 
 /**
