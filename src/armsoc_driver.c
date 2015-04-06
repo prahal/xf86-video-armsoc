@@ -1006,8 +1006,8 @@ ARMSOCScreenInit(SCREEN_INIT_ARGS_DECL)
 	/* Reset the visual list. */
 	miClearVisualTypes();
 
-	if (!miSetVisualTypes(depth,
-			miGetDefaultVisualMask(depth),
+	if (!miSetVisualTypes(pScrn->depth,
+			miGetDefaultVisualMask(pScrn->depth),
 			pScrn->rgbBits, pScrn->defaultVisual)) {
 		ERROR_MSG(
 				"Cannot initialize the visual type for %d depth, %d bits per pixel!",
@@ -1028,6 +1028,17 @@ ARMSOCScreenInit(SCREEN_INIT_ARGS_DECL)
 			pScrn->bitsPerPixel)) {
 		ERROR_MSG("fbScreenInit() failed!");
 		goto fail3;
+	}
+
+	{
+		unsigned char *dst = armsoc_bo_map(pARMSOC->scanout);
+		uint32_t *p, *e;
+		/* XXX: Pixman using NEON might be faster here,
+		 * but hopefully we won't hit this very often. */
+		p = (uint32_t *) (dst);
+		e = (uint32_t *) (dst + armsoc_bo_size(pARMSOC->scanout));
+		for (; p < e; p++)
+			*p |= 0xFF000000;
 	}
 
 	/* Fixup RGB ordering: */

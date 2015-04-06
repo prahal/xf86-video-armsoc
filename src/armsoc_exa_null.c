@@ -104,6 +104,8 @@ FreeScreen(FREE_SCREEN_ARGS_DECL)
 {
 }
 
+Bool InstallAlphaHack(ScreenPtr pScreen);
+
 struct ARMSOCEXARec *
 InitNullEXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 {
@@ -155,6 +157,8 @@ InitNullEXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 		ERROR_MSG("exaDriverInit failed");
 		goto free_exa;
 	}
+
+	InstallAlphaHack(pScreen);
 
 	armsoc_exa->CloseScreen = CloseScreen;
 	armsoc_exa->FreeScreen = FreeScreen;
