@@ -98,27 +98,19 @@ static int init_plane_for_cursor(int drm_fd, uint32_t plane_id)
 			if (this_prop) {
 				if (!strncmp(this_prop->name, "zpos",
 							DRM_PROP_NAME_LEN)) {
-					res = drmModeObjectSetProperty(drm_fd,
-							plane_id,
-							DRM_MODE_OBJECT_PLANE,
-							this_prop->prop_id,
-							1);
-					drmModeFreeProperty(this_prop);
-					break;
+					/* zpos is now immutable : kernel commit 92104886e483 */
+					unsigned int value  = props->prop_values[i];
+					if (value == 1)	 {
+						res = 0;
+						drmModeFreeProperty(this_prop);
+						break;
+					}
+
 				}
 				drmModeFreeProperty(this_prop);
 			}
 		}
 		drmModeFreeObjectProperties(props);
-	}
-
-	if (res) {
-		/* Try the old method */
-		struct drm_exynos_plane_set_zpos data;
-		data.plane_id = plane_id;
-		data.zpos = 1;
-
-		res = ioctl(drm_fd, DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS, &data);
 	}
 
 	return res;
