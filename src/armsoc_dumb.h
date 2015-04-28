@@ -78,7 +78,6 @@ uint32_t armsoc_bo_width(struct armsoc_bo *bo);
 uint32_t armsoc_bo_height(struct armsoc_bo *bo);
 uint8_t armsoc_bo_depth(struct armsoc_bo *bo);
 uint32_t armsoc_bo_bpp(struct armsoc_bo *bo);
-uint32_t armsoc_bo_depth(struct armsoc_bo *bo);
 uint32_t armsoc_bo_pitch(struct armsoc_bo *bo);
 
 void armsoc_bo_reference(struct armsoc_bo *bo);
