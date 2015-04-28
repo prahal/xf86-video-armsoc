@@ -98,11 +98,15 @@ static int init_plane_for_cursor(int drm_fd, uint32_t plane_id)
 			if (this_prop) {
 				if (!strncmp(this_prop->name, "zpos",
 							DRM_PROP_NAME_LEN)) {
+					/* zpos is now immutable : kernel commit 92104886e4834c2ceb8748efa49d040714018eb5 */
+					res = 0;
+					/*
 					res = drmModeObjectSetProperty(drm_fd,
 							plane_id,
 							DRM_MODE_OBJECT_PLANE,
 							this_prop->prop_id,
 							1);
+					*/
 					drmModeFreeProperty(this_prop);
 					break;
 				}
