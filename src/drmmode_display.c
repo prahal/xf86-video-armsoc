@@ -1447,9 +1447,18 @@ static Bool resize_scanout_bo(ScrnInfoPtr pScrn, int width, int height)
 	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
 	ScreenPtr pScreen = pScrn->pScreen;
 	uint32_t pitch;
+	uint8_t depth, bpp;
 
 	TRACE_ENTER();
-	DEBUG_MSG("Resize: %dx%d", width, height);
+
+	depth = armsoc_bo_depth(pARMSOC->scanout);
+	bpp = armsoc_bo_bpp(pARMSOC->scanout);
+	DEBUG_MSG("Resize: %dx%d %d,%d", width, height, depth, bpp);
+
+	/* We don't expect the depth and bpp to change for the screen
+	 * assert this here as a check */
+	//assert(depth == pScrn->bitsPerPixel);
+	//assert(bpp == pScrn->bitsPerPixel);
 
 	pScrn->virtualX = width;
 	pScrn->virtualY = height;
@@ -1462,7 +1471,7 @@ static Bool resize_scanout_bo(ScrnInfoPtr pScrn, int width, int height)
 		/* resize_scanout_bo creates and takes ref on new scanout bo */
 		new_scanout = armsoc_bo_new_with_dim(pARMSOC->dev,
 				width, height,
-				pScrn->depth, pScrn->bitsPerPixel,
+				depth, bpp,
 				ARMSOC_BO_SCANOUT);
 		if (!new_scanout) {
 			/* Try to use the previous buffer if the new resolution
@@ -1552,9 +1561,9 @@ static Bool resize_scanout_bo(ScrnInfoPtr pScrn, int width, int height)
 		 * works through. This needs improvement.
 		 */
 		pScreen->ModifyPixmapHeader(rootPixmap,
-				pScrn->virtualX, pScrn->virtualY,
-				pScrn->depth, pScrn->bitsPerPixel, pitch,
-				armsoc_bo_map(pARMSOC->scanout));
+			pScrn->virtualX, pScrn->virtualY,
+			depth, bpp, pitch,
+			armsoc_bo_map(pARMSOC->scanout));
 
 		/* Bump the serial number to ensure that all existing DRI2
 		 * buffers are invalidated.
