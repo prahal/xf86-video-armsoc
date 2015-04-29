@@ -605,7 +605,7 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 	drmModePlane *ovr;
 	int w, h, pad;
 	uint32_t handles[4], pitches[4], offsets[4]; /* we only use [0] */
-	uint32_t pixel_format = DRM_FORMAT_XRGB8888;
+	uint32_t pixel_format = DRM_FORMAT_ARGB8888;
 
 	if (drmmode->cursor) {
 		INFO_MSG("cursor already initialized");
@@ -638,7 +638,7 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 
 	if (pARMSOC->drmmode_interface->init_plane_for_cursor) {
 		int i;
-		int found = 0;
+		int found = 0, second = 0;
 
 		for (i = 0; i < plane_resources->count_planes; i++) {
 			ovr = drmModeGetPlane(drmmode->fd, plane_resources->planes[i]);
@@ -653,8 +653,14 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 				drmmode->fd, ovr->plane_id))
 				found = 1;
 
-			if (found) break;
+			if (found) {
+				if (second)
+					break;
+				second = 1;
+				found = 0;
+			}
 
+			ERROR_MSG("not found yet planeid %u", ovr->plane_id);
 			drmModeFreePlane(ovr);
 		}
 

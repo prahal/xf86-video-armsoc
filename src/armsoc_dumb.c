@@ -386,10 +386,8 @@ int armsoc_bo_add_fb(struct armsoc_bo *bo)
 		       pixel_format = DRM_FORMAT_ARGB4444;
 	}
 
-/*
 	if (bo->bpp == 32 && bo->depth == 32 && !bo->dev->alpha_supported)
 		depth = 24;
-*/
 
 	xf86DrvMsg(-1, X_WARNING, "%s alpha supported ? %d request bpp %d , requested depth %d, using depth %d\n", __func__, bo->dev->alpha_supported, bo->bpp, bo->depth, depth);
 	stack_trace();
@@ -407,7 +405,6 @@ int armsoc_bo_add_fb(struct armsoc_bo *bo)
 		xf86DrvMsg(-1, X_ERROR, "HW cursor: drmModeAddFB2 failed: %s",
 					strerror(errno));
 
-#if 0
 	if (ret < 0 && bo->bpp == 32 && bo->depth == 32 && bo->dev->alpha_supported) {
 		/* The DRM driver may not support an alpha channel but
 		 * it is possible to continue by ignoring the alpha, so
@@ -420,7 +417,6 @@ int armsoc_bo_add_fb(struct armsoc_bo *bo)
 		ret = drmModeAddFB(bo->dev->fd, bo->width, bo->height, 24,
 				bo->bpp, bo->pitch, bo->handle, &bo->fb_id);
 	}
-#endif
 
 	if (ret < 0) {
 		bo->fb_id = 0;
