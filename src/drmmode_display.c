@@ -289,19 +289,23 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		output_count++;
 	}
 
+	DEBUG_MSG("A");
 	if (!xf86CrtcRotate(crtc)) {
 		ERROR_MSG(
 				"failed to assign rotation in drmmode_set_mode_major()");
 		ret = FALSE;
 		goto cleanup;
 	}
+	DEBUG_MSG("B");
 
 	if (crtc->funcs->gamma_set)
 		crtc->funcs->gamma_set(crtc, crtc->gamma_red, crtc->gamma_green,
 				       crtc->gamma_blue, crtc->gamma_size);
 
+	DEBUG_MSG("C");
 	drmmode_ConvertToKMode(crtc->scrn, &kmode, mode);
 
+	DEBUG_MSG("D");
 	err = drmModeSetCrtc(drmmode->fd, drmmode_crtc->crtc_id,
 			fb_id, x, y, output_ids, output_count, &kmode);
 	if (err) {
@@ -309,12 +313,14 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 				"drm failed to set mode: %s", strerror(-err));
 
 		ret = FALSE;
+	DEBUG_MSG("D1");
 		if (!drmmode_revert_mode(crtc, output_ids, output_count))
 			goto cleanup;
 		else
 			goto done_setting;
 	}
 
+	DEBUG_MSG("E");
 	/* get the actual crtc info */
 	newcrtc = drmModeGetCrtc(drmmode->fd, drmmode_crtc->crtc_id);
 	if (!newcrtc) {
@@ -327,6 +333,7 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 			goto done_setting;
 	}
 
+	DEBUG_MSG("F");
 	if (kmode.hdisplay != newcrtc->mode.hdisplay ||
 		kmode.vdisplay != newcrtc->mode.vdisplay) {
 
@@ -598,7 +605,7 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 	drmModePlane *ovr;
 	int w, h, pad;
 	uint32_t handles[4], pitches[4], offsets[4]; /* we only use [0] */
-	uint32_t pixel_format = DRM_FORMAT_ARGB8888;
+	uint32_t pixel_format = DRM_FORMAT_XRGB8888;
 
 	if (drmmode->cursor) {
 		INFO_MSG("cursor already initialized");
@@ -666,6 +673,7 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 			return FALSE;
 		}
 	}
+
 
 	cursor = calloc(1, sizeof(struct drmmode_cursor_rec));
 	if (!cursor) {
@@ -1477,6 +1485,7 @@ static Bool resize_scanout_bo(ScrnInfoPtr pScrn, int width, int height)
 	depth = armsoc_bo_depth(pARMSOC->scanout);
 	bpp = armsoc_bo_bpp(pARMSOC->scanout);
 	DEBUG_MSG("Resize: %dx%d %d,%d", width, height, depth, bpp);
+	ERROR_MSG("Resize: %dx%d %d,%d", width, height, depth, bpp);
 
 	/* We don't expect the depth and bpp to change for the screen
 	 * assert this here as a check */
