@@ -628,20 +628,43 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 		return FALSE;
 	}
 
-	ovr = drmModeGetPlane(drmmode->fd, plane_resources->planes[0]);
-	if (!ovr) {
-		ERROR_MSG("HW cursor: drmModeGetPlane failed: %s",
-					strerror(errno));
-		drmModeFreePlaneResources(plane_resources);
-		return FALSE;
-	}
 
-	if (pARMSOC->drmmode_interface->init_plane_for_cursor &&
-		pARMSOC->drmmode_interface->init_plane_for_cursor(
-				drmmode->fd, ovr->plane_id)) {
-		ERROR_MSG("Failed driver-specific cursor initialization");
-		drmModeFreePlaneResources(plane_resources);
-		return FALSE;
+	if (pARMSOC->drmmode_interface->init_plane_for_cursor) {
+		int i;
+		int found = 0;
+
+		for (i = 0; i < plane_resources->count_planes; i++) {
+			ovr = drmModeGetPlane(drmmode->fd, plane_resources->planes[i]);
+			if (!ovr) {
+				ERROR_MSG("HW cursor: drmModeGetPlane failed: %s",
+							strerror(errno));
+				drmModeFreePlaneResources(plane_resources);
+				return FALSE;
+			}
+
+			if (!pARMSOC->drmmode_interface->init_plane_for_cursor(
+				drmmode->fd, ovr->plane_id))
+				found = 1;
+
+			if (found) break;
+
+			drmModeFreePlane(ovr);
+		}
+
+		if (!found) {
+			ERROR_MSG("Failed driver-specific cursor initialization");
+			drmModeFreePlaneResources(plane_resources);
+			return FALSE;
+		}
+			ERROR_MSG("HW id %d", ovr->plane_id);
+	} else {
+		ovr = drmModeGetPlane(drmmode->fd, plane_resources->planes[0]);
+		if (!ovr) {
+			ERROR_MSG("HW cursor: drmModeGetPlane failed: %s",
+						strerror(errno));
+			drmModeFreePlaneResources(plane_resources);
+			return FALSE;
+		}
 	}
 
 	cursor = calloc(1, sizeof(struct drmmode_cursor_rec));
