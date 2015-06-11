@@ -81,49 +81,6 @@ struct drm_exynos_gem_create {
 
 #define ALIGN(val, align)	(((val) + (align) - 1) & ~((align) - 1))
 
-static int init_plane_for_cursor(int drm_fd, uint32_t plane_id)
-{
-	int res = -1;
-	drmModeObjectPropertiesPtr props;
-	props = drmModeObjectGetProperties(drm_fd, plane_id,
-			DRM_MODE_OBJECT_PLANE);
-
-	if (props) {
-		int i;
-
-		for (i = 0; i < props->count_props; i++) {
-			drmModePropertyPtr this_prop;
-			this_prop = drmModeGetProperty(drm_fd, props->props[i]);
-
-			if (this_prop) {
-				if (!strncmp(this_prop->name, "zpos",
-							DRM_PROP_NAME_LEN)) {
-					res = drmModeObjectSetProperty(drm_fd,
-							plane_id,
-							DRM_MODE_OBJECT_PLANE,
-							this_prop->prop_id,
-							1);
-					drmModeFreeProperty(this_prop);
-					break;
-				}
-				drmModeFreeProperty(this_prop);
-			}
-		}
-		drmModeFreeObjectProperties(props);
-	}
-
-	if (res) {
-		/* Try the old method */
-		struct drm_exynos_plane_set_zpos data;
-		data.plane_id = plane_id;
-		data.zpos = 1;
-
-		res = ioctl(drm_fd, DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS, &data);
-	}
-
-	return res;
-}
-
 static int create_custom_gem(int fd, struct armsoc_create_gem *create_gem)
 {
 	struct drm_exynos_gem_create create_exynos;
@@ -163,7 +120,7 @@ struct drmmode_interface exynos_interface = {
 	CURSORH               /* cursor_height */,
 	CURSORPAD             /* cursor padding */,
 	HWCURSOR_API_PLANE    /* cursor_api */,
-	init_plane_for_cursor /* init_plane_for_cursor */,
+	NULL                  /* init_plane_for_cursor */,
 	0                     /* vblank_query_supported */,
 	create_custom_gem     /* create_custom_gem */,
 };
