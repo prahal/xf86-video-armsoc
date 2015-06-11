@@ -28,17 +28,6 @@
 #include <xf86drm.h>
 #include <sys/ioctl.h>
 
-/* Following ioctls should be included from libdrm exynos_drm.h but
- * libdrm doesn't install this correctly so for now they are here.
- */
-struct drm_exynos_plane_set_zpos {
-	__u32 plane_id;
-	__s32 zpos;
-};
-#define DRM_EXYNOS_PLANE_SET_ZPOS 0x06
-#define DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS DRM_IOWR(DRM_COMMAND_BASE + \
-		DRM_EXYNOS_PLANE_SET_ZPOS, struct drm_exynos_plane_set_zpos)
-
 enum e_drm_exynos_gem_mem_type {
 	/* Physically Continuous memory and used as default. */
 	EXYNOS_BO_CONTIG	= 0 << 0,
