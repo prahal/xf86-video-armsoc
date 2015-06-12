@@ -112,7 +112,6 @@ struct drmmode_interface pl111_interface = {
 	CURSORH               /* cursor_height */,
 	CURSORPAD             /* cursor padding */,
 	HWCURSOR_API_STANDARD /* cursor_api */,
-	NULL                  /* init_plane_for_cursor */,
 	0                     /* vblank_query_supported */,
 	create_custom_gem     /* create_custom_gem */,
 };

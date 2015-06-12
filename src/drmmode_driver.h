@@ -67,21 +67,6 @@ struct drmmode_interface {
 	 */
 	enum hwcursor_api cursor_api;
 
-	/* (Optional) Initialize the hardware cursor plane.
-	 *
-	 * When cursor_api is HWCURSOR_API_PLANE, this function should do any
-	 * plane initialization necessary, for example setting the z-order on the
-	 * plane to appear above all other layers. If this function fails the driver
-	 * falls back to using a software cursor.
-	 *
-	 * If cursor_api is not HWCURSOR_API_PLANE this function should be omitted.
-	 *
-	 * @param drm_fd   The DRM device file
-	 * @param plane_id The plane to initialize
-	 * @return 0 on success, non-zero on failure
-	 */
-	int (*init_plane_for_cursor)(int drm_fd, uint32_t plane_id);
-
 	/* Boolean value indicating whether the DRM supports
 	 * vblank timestamp query
 	 */

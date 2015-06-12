@@ -37,12 +37,6 @@
 /* Padding added down each side of cursor image */
 #define CURSORPAD (0)
 
-/* Optional function only for HWCURSOR_API_PLANE interface */
-static int init_plane_for_cursor(int drm_fd, uint32_t plane_id)
-{
-	return 0;
-}
-
 static int create_custom_gem(int fd, struct armsoc_create_gem *create_gem)
 {
 	/*
@@ -59,7 +53,6 @@ struct drmmode_interface template_interface = {
 	CURSORH               /* cursor_height */,
 	CURSORPAD             /* cursor padding */,
 	HWCURSOR_API_STANDARD /* cursor_api */,
-	init_plane_for_cursor /* init_plane_for_cursor */,
 	0                     /* vblank_query_supported */,
 	create_custom_gem     /* create_custom_gem */,
 };
