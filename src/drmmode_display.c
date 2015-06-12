@@ -620,6 +620,40 @@ drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 		drmmode_show_cursor_image(crtc, TRUE);
 }
 
+/* Get 'zpos' property from DRM plane. */
+static int
+drmmode_plane_zpos(int drm_fd, drmModePlane *plane)
+{
+	unsigned int i;
+	int ret = -1;
+	drmModeObjectPropertiesPtr props;
+
+	props = drmModeObjectGetProperties(drm_fd, plane->plane_id,
+		DRM_MODE_OBJECT_PLANE);
+
+	if (!props)
+		goto out;
+
+	for (i = 0; i < props->count_props; i++) {
+		drmModePropertyPtr prop;
+		prop = drmModeGetProperty(drm_fd, props->props[i]);
+		if (!prop)
+			continue;
+
+		if (!strncmp(prop->name, "zpos", DRM_PROP_NAME_LEN))
+			ret = props->prop_values[i];
+
+		drmModeFreeProperty(prop);
+
+		if (ret != -1)
+			break;
+	}
+
+out:
+	drmModeFreeObjectProperties(props);
+	return ret;
+}
+
 static Bool
 drmmode_cursor_init_plane(ScreenPtr pScreen)
 {
@@ -628,7 +662,7 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 	struct drmmode_rec *drmmode = drmmode_from_scrn(pScrn);
 	struct drmmode_cursor_rec *cursor;
 	drmModePlaneRes *plane_resources;
-	drmModePlane *ovr;
+	drmModePlane *ovr = NULL;
 	int w, h, pad;
 	uint32_t handles[4], pitches[4], offsets[4]; /* we only use [0] */
 
@@ -654,34 +688,39 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 		return FALSE;
 	}
 
-	if (plane_resources->count_planes < 1) {
+	if (plane_resources->count_planes > 0) {
+		unsigned int i;
+		int temp, z = -1;
+		drmModePlane *p;
+
+		for (i = 0; i < plane_resources->count_planes; i++) {
+			p = drmModeGetPlane(drmmode->fd, plane_resources->planes[i]);
+			if (!p) {
+				ERROR_MSG("HW cursor: drmModeGetPlane failed: %s",
+				strerror(errno));
+				goto fail_plane_res;
+			}
+
+			temp = drmmode_plane_zpos(drmmode->fd, p);
+			if (temp > z) {
+				z = temp;
+				ovr = p;
+			}
+		}
+	} else {
 		ERROR_MSG("not enough planes for HW cursor");
-		drmModeFreePlaneResources(plane_resources);
-		return FALSE;
+		goto fail_plane_res;
 	}
 
-	ovr = drmModeGetPlane(drmmode->fd, plane_resources->planes[0]);
 	if (!ovr) {
-		ERROR_MSG("HW cursor: drmModeGetPlane failed: %s",
-					strerror(errno));
-		drmModeFreePlaneResources(plane_resources);
-		return FALSE;
-	}
-
-	if (pARMSOC->drmmode_interface->init_plane_for_cursor &&
-		pARMSOC->drmmode_interface->init_plane_for_cursor(
-				drmmode->fd, ovr->plane_id)) {
-		ERROR_MSG("Failed driver-specific cursor initialization");
-		drmModeFreePlaneResources(plane_resources);
-		return FALSE;
+		ERROR_MSG("HW cursor: no suitable plane found");
+		goto fail_plane_res;
 	}
 
 	cursor = calloc(1, sizeof(struct drmmode_cursor_rec));
 	if (!cursor) {
 		ERROR_MSG("HW cursor: calloc failed");
-		drmModeFreePlane(ovr);
-		drmModeFreePlaneResources(plane_resources);
-		return FALSE;
+		goto fail_plane;
 	}
 
 	cursor->ovr = ovr;
@@ -698,9 +737,7 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 	if (!cursor->bo) {
 		ERROR_MSG("HW cursor: buffer allocation failed");
 		free(cursor);
-		drmModeFreePlane(ovr);
-		drmModeFreePlaneResources(plane_resources);
-		return FALSE;
+		goto fail_plane;
 	}
 
 	handles[0] = armsoc_bo_handle(cursor->bo);
@@ -714,9 +751,7 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 					strerror(errno));
 		armsoc_bo_unreference(cursor->bo);
 		free(cursor);
-		drmModeFreePlane(ovr);
-		drmModeFreePlaneResources(plane_resources);
-		return FALSE;
+		goto fail_plane;
 	}
 
 	if (!xf86_cursors_init(pScreen, w, h, HARDWARE_CURSOR_ARGB)) {
@@ -726,15 +761,20 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 
 		armsoc_bo_unreference(cursor->bo);
 		free(cursor);
-		drmModeFreePlane(ovr);
-		drmModeFreePlaneResources(plane_resources);
-		return FALSE;
+		goto fail_plane;
 	}
 
 	INFO_MSG("HW cursor initialized");
 	drmmode->cursor = cursor;
 	drmModeFreePlaneResources(plane_resources);
 	return TRUE;
+
+fail_plane:
+	drmModeFreePlane(ovr);
+
+fail_plane_res:
+	drmModeFreePlaneResources(plane_resources);
+	return FALSE;
 }
 
 static Bool
