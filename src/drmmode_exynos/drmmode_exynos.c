@@ -84,6 +84,8 @@ static int create_custom_gem(int fd, struct armsoc_create_gem *create_gem)
 	assert((create_gem->buf_type == ARMSOC_BO_SCANOUT) ||
 			(create_gem->buf_type == ARMSOC_BO_NON_SCANOUT));
 
+	// TODO: use exynos_bo_create here
+
 	/* Contiguous allocations are not supported in some exynos drm versions.
 	 * When they are supported all allocations are effectively contiguous
 	 * anyway, so for simplicity we always request non contiguous buffers.
