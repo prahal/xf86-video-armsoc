@@ -51,6 +51,10 @@
 #include <libudev.h>
 #include "drmmode_driver.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 struct drmmode_cursor_rec {
 	/* hardware cursor: */
 	struct armsoc_bo *bo;
