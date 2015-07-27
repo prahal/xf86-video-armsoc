@@ -837,6 +837,11 @@ ARMSOCDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		DEBUG_MSG("can flip:  %d -> %d", src_fb_id, dst_fb_id);
 		cmd->type = DRI2_FLIP_COMPLETE;
 
+		while (pARMSOC->pending_flips > 1) {
+			DEBUG_MSG("waiting..");
+			drmmode_wait_for_event(pScrn);
+		}
+
 		/* TODO: MIDEGL-1461: Handle rollback if multiple CRTC flip is
 		 * only partially successful
 		 */
