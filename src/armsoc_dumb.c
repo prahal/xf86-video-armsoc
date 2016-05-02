@@ -27,7 +27,6 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include <xf86.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
