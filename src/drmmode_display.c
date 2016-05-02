@@ -48,6 +48,7 @@
 #include "drm_fourcc.h"
 #include "X11/Xatom.h"
 
+#include <sys/stat.h>
 #include <libudev.h>
 #include "drmmode_driver.h"
 
