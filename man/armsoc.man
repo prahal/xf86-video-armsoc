@@ -51,6 +51,12 @@ Default: NULL
 Select which dri card to use.
 .IP
 Default: 0
+.TP
+.BI "Option \*qDRI2MaxBuffers\*q \*q" integer \*q
+Sets the number of buffers used when doing rendering
+through DRI2. Currently defaults to double buffering.
+.IP
+Default: -1
 
 .SH DRM DEVICE SELECTION
 
