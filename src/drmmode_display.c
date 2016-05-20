@@ -853,6 +853,7 @@ Bool drmmode_cursor_init(ScreenPtr pScreen)
 		return FALSE;
 	default:
 		assert(0);
+		return FALSE;
 	}
 }
 

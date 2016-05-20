@@ -596,6 +596,7 @@ static void nextBuffer(DrawablePtr pDraw, struct ARMSOCDRI2BufferRec *backBuf)
 		bo = ARMSOCPixmapBo(backBuf->pPixmaps[backBuf->currentPixmap]);
 		assert(bo);
 		ret = armsoc_bo_get_name(bo, &DRIBUF(backBuf)->name);
+		(void)ret;
 		assert(!ret);
 	} else {
 		Bool ret;
@@ -645,6 +646,7 @@ void updateResizedBuffer(ScrnInfoPtr pScrn, void *buffer,
 				/* Update the buffer name if this pixmap is current */
 				if (i == buf->currentPixmap) {
 					ret = armsoc_bo_get_name(resized_bo, &dri2buf->name);
+					(void)ret;
 					assert(!ret);
 				}
 
@@ -1035,6 +1037,7 @@ ARMSOCDRI2CloseScreen(ScreenPtr pScreen)
 
 	if (pARMSOC->swap_chain) {
 		unsigned int idx = pARMSOC->swap_chain_count % pARMSOC->swap_chain_size;
+		(void)idx;
 		assert(!pARMSOC->swap_chain[idx]);
 		free(pARMSOC->swap_chain);
 		pARMSOC->swap_chain = NULL;
