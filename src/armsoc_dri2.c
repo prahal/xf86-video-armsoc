@@ -659,6 +659,7 @@ static void nextBuffer(DrawablePtr pDraw, struct ARMSOCDRI2BufferRec *backBuf)
 		bo = ARMSOCPixmapBo(backBuf->pPixmaps[backBuf->currentPixmap]);
 		assert(bo);
 		ret = armsoc_bo_get_name(bo, &DRIBUF(backBuf)->name);
+		(void)ret;
 		assert(!ret);
 	} else {
 		Bool ret;
