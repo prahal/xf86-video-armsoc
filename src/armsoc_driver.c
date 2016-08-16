@@ -138,11 +138,12 @@ ARMSOCSetDRMMaster(void)
 
 	assert(connection.fd >= 0);
 
-	if (!connection.master_count)
+	if (!connection.master_count) {
 		ret = drmSetMaster(connection.fd);
 
-	if (!ret)
-		connection.master_count++;
+		if (!ret)
+			connection.master_count++;
+	}
 
 	return ret;
 }
@@ -155,11 +156,12 @@ ARMSOCDropDRMMaster(void)
 	assert(connection.fd >= 0);
 	assert(connection.master_count > 0);
 
-	if (1 == connection.master_count)
+	if (1 == connection.master_count) {
 		ret = drmDropMaster(connection.fd);
 
-	if (!ret)
-		connection.master_count--;
+		if (!ret)
+			connection.master_count--;
+	}
 
 	return ret;
 }
@@ -329,6 +331,7 @@ ARMSOCCloseDRM(ScrnInfoPtr pScrn)
 	if (pARMSOC && (pARMSOC->drmFD >= 0)) {
 		drmFree(pARMSOC->deviceName);
 		connection.open_count--;
+		connection.master_count--;
 		if (!connection.open_count) {
 			assert(!connection.master_count);
 			drmClose(pARMSOC->drmFD);
