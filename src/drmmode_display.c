@@ -689,12 +689,13 @@ drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 	set_cursor_image(crtc, d, image);
 }
 
-/* Get 'zpos' property from DRM plane. */
+/* Get a property of type integer from DRM plane. */
 static int
-drmmode_plane_zpos(int drm_fd, drmModePlane *plane)
+drmmode_plane_get_int_prop_by_name(int drm_fd, drmModePlane *plane, const char *prop_name)
 {
 	unsigned int i;
 	int ret = -1;
+
 	drmModeObjectPropertiesPtr props;
 
 	props = drmModeObjectGetProperties(drm_fd, plane->plane_id,
@@ -709,7 +710,7 @@ drmmode_plane_zpos(int drm_fd, drmModePlane *plane)
 		if (!prop)
 			continue;
 
-		if (!strncmp(prop->name, "zpos", DRM_PROP_NAME_LEN))
+		if (!strncmp(prop->name, prop_name, DRM_PROP_NAME_LEN))
 			ret = props->prop_values[i];
 
 		drmModeFreeProperty(prop);
@@ -723,38 +724,33 @@ out:
 	return ret;
 }
 
-static Bool
-drmmode_cursor_init_plane(ScreenPtr pScreen)
-{
-	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
-	struct drmmode_rec *drmmode = drmmode_from_scrn(pScrn);
-	struct drmmode_cursor_rec *cursor;
-	drmModePlaneRes *plane_resources;
-	drmModePlane *ovr = NULL;
-	int w, h, pad;
-	uint32_t handles[4], pitches[4], offsets[4]; /* we only use [0] */
 
-	if (drmmode->cursor) {
-		INFO_MSG("cursor already initialized");
-		return TRUE;
-	}
+/* find an unused plane which can be used as a mouse cursor.  Note
+ * that we cheat a bit, in order to not burn one overlay per crtc,
+ * and only show the mouse cursor on one crtc at a time
+ */
+static drmModePlane *
+drmmode_get_top_overlay_plane(ScreenPtr pScreen)
+{
+	drmModePlaneRes *plane_resources;
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	struct drmmode_rec *drmmode = drmmode_from_scrn(pScrn);
+	drmModePlane *ovr = NULL;
+
+	/* Exclude primary and cursor planes from GetPlaneResources output */
+	drmSetClientCap(drmmode->fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 0);
 
 	if (!xf86LoaderCheckSymbol("drmModeGetPlaneResources")) {
 		ERROR_MSG(
 				"HW cursor not supported (needs libdrm 2.4.30 or higher)");
-		return FALSE;
+		goto out;
 	}
 
-	/* find an unused plane which can be used as a mouse cursor.  Note
-	 * that we cheat a bit, in order to not burn one overlay per crtc,
-	 * and only show the mouse cursor on one crtc at a time
-	 */
 	plane_resources = drmModeGetPlaneResources(drmmode->fd);
 	if (!plane_resources) {
 		ERROR_MSG("HW cursor: drmModeGetPlaneResources failed: %s",
 						strerror(errno));
-		return FALSE;
+		goto out;
 	}
 
 	if (plane_resources->count_planes > 0) {
@@ -770,19 +766,106 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 				goto fail_plane_res;
 			}
 
-			temp = drmmode_plane_zpos(drmmode->fd, p);
+			temp = drmmode_plane_get_int_prop_by_name(drmmode->fd, p, "zpos");
 			if (temp > z) {
 				z = temp;
 				ovr = p;
 			}
 		}
+
 	} else {
-		ERROR_MSG("not enough planes for HW cursor");
+		ERROR_MSG("not enough planes for HW cursor on overlay plane");
 		goto fail_plane_res;
 	}
 
+fail_plane_res:
+	drmModeFreePlaneResources(plane_resources);
+out:
+	return ovr;
+}
+
+
+static drmModePlane *
+drmmode_get_cursor_plane(ScreenPtr pScreen)
+{
+	drmModePlaneRes *plane_resources;
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	struct drmmode_rec *drmmode = drmmode_from_scrn(pScrn);
+	drmModePlane *ovr = NULL;
+
+	/* Include cursor plane in GetPlaneResources output */
+	drmSetClientCap(drmmode->fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
+
+	if (!xf86LoaderCheckSymbol("drmModeGetPlaneResources")) {
+		ERROR_MSG(
+				"HW cursor not supported (needs libdrm 2.4.30 or higher)");
+		goto out;
+	}
+
+	plane_resources = drmModeGetPlaneResources(drmmode->fd);
+	if (!plane_resources) {
+		ERROR_MSG("HW cursor: drmModeGetPlaneResources failed: %s",
+						strerror(errno));
+		goto out;
+	}
+
+	if (plane_resources->count_planes > 0) {
+		unsigned int i;
+		int temp, z = -1;
+		drmModePlane *p;
+
+		for (i = 0; i < plane_resources->count_planes; i++) {
+			p = drmModeGetPlane(drmmode->fd, plane_resources->planes[i]);
+			if (!p) {
+				ERROR_MSG("HW cursor: drmModeGetPlane failed: %s",
+				strerror(errno));
+				goto fail_plane_res;
+			}
+
+			temp = drmmode_plane_get_int_prop_by_name(drmmode->fd, p, "type");
+			if (temp == DRM_PLANE_TYPE_CURSOR) {
+				temp = drmmode_plane_get_int_prop_by_name(drmmode->fd, p, "zpos");
+				if (temp > z) {
+					z = temp;
+					ovr = p;
+				}
+			}
+		}
+
+	} else {
+		ERROR_MSG("not enough planes for HW cursor on cursor plane");
+		goto fail_plane_res;
+	}
+
+fail_plane_res:
+	drmModeFreePlaneResources(plane_resources);
+out:
+	return ovr;
+}
+
+
+static Bool
+drmmode_cursor_init_plane(ScreenPtr pScreen)
+{
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
+	struct drmmode_rec *drmmode = drmmode_from_scrn(pScrn);
+	struct drmmode_cursor_rec *cursor;
+	drmModePlane *ovr = NULL;
+	int w, h, pad;
+	uint32_t handles[4], pitches[4], offsets[4]; /* we only use [0] */
+
+	if (drmmode->cursor) {
+		INFO_MSG("cursor already initialized");
+		return TRUE;
+	}
+
+	ovr = drmmode_get_cursor_plane(pScreen);
+
+	if (!ovr) ovr = drmmode_get_top_overlay_plane(pScreen);
+
 	if (!ovr) {
-		ERROR_MSG("HW cursor: no suitable plane found");
+		ERROR_MSG("HW cursor: no suitable overlay plane found");
 		goto fail_plane_res;
 	}
 
@@ -838,14 +921,12 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 
 	INFO_MSG("HW cursor initialized");
 	drmmode->cursor = cursor;
-	drmModeFreePlaneResources(plane_resources);
 	return TRUE;
 
 fail_plane:
 	drmModeFreePlane(ovr);
 
 fail_plane_res:
-	drmModeFreePlaneResources(plane_resources);
 	return FALSE;
 }
 
