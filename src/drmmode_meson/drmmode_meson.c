@@ -117,11 +117,11 @@ static int gem_set_domain(int fd, struct armsoc_gem_set_domain gsd)
 struct drmmode_interface meson_interface = {
 	"meson",
 	1                     /* use_page_flip_events */,
+	1                     /* use_early_display */,
 	CURSORW               /* cursor width */,
 	CURSORH               /* cursor_height */,
 	CURSORPAD             /* cursor padding */,
 	HWCURSOR_API_STANDARD /* cursor_api */,
-	NULL                  /* init_plane_for_cursor */,
 	0                     /* vblank_query_supported */,
 	create_custom_gem     /* create_custom_gem */,
 	cache_ops_control     /* cache_ops_control */,
