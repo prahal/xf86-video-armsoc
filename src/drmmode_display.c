@@ -909,7 +909,7 @@ drmmode_cursor_init_plane(ScreenPtr pScreen)
 		goto fail_plane;
 	}
 
-	if (!xf86_cursors_init(pScreen, w, h, HARDWARE_CURSOR_ARGB)) {
+	if (!xf86_cursors_init(pScreen, w, h, HARDWARE_CURSOR_ARGB | HARDWARE_CURSOR_UPDATE_UNHIDDEN)) {
 		ERROR_MSG("xf86_cursors_init() failed");
 		if (drmModeRmFB(drmmode->fd, cursor->fb_id))
 			ERROR_MSG("drmModeRmFB() failed");
