@@ -979,6 +979,43 @@ ARMSOCDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		 * completion unconditionally.
 		 */
 		if (ret < 0) {
+#if 1
+			/* HACK: when dpms turns off the screen, gnome-shell draw the guard overlay.
+			 * This trigger a pâge flip that fails in kernel land as the display is off
+			 * (the more reliably since exynos is atomic update enabled).
+			 * The userspace Mali blob gets page flip off by one until next time
+			 * when the sync will be restored.
+			 * Workaround: fake the page flip when so instead of plain fail to trick the
+			 *  Mali blob.
+			 */
+			if (ret == 0)
+				cmd->flags |= ARMSOC_SWAP_FAKE_FLIP;
+
+			if (pARMSOC->drmmode_interface->use_page_flip_events)
+				cmd->swapCount = -(ret + 1);
+			else
+				cmd->swapCount = 0;
+
+			/* Flip successfully scheduled.
+			 * Now exchange bos between src and dst pixmaps
+			 * and select the next bo for the back buffer.
+			 */
+			if (ret) {
+				assert(cmd->type == DRI2_FLIP_COMPLETE);
+				exchangebufs(pDraw, pSrcBuffer, pDstBuffer);
+
+				if (pSrcBuffer->attachment == DRI2BufferBackLeft)
+					nextBuffer(pDraw, ARMSOCBUF(pSrcBuffer));
+			}
+
+			/* Store the new scanout bo now as the destination
+			 * buffer bo might be exchanged if another swap is
+			 * scheduled before this swap completes
+			 */
+			cmd->new_scanout = boFromBuffer(pDstBuffer);
+			if (cmd->swapCount == 0)
+				ARMSOCDRI2SwapComplete(cmd);
+#else
 			/*
 			 * Error while flipping; bail.
 			 */
@@ -994,6 +1031,7 @@ ARMSOCDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 				ARMSOCDRI2SwapComplete(cmd);
 
 			return FALSE;
+#endif
 		} else {
 			if (ret == 0)
 				cmd->flags |= ARMSOC_SWAP_FAKE_FLIP;
