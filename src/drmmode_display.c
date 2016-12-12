@@ -2111,8 +2111,8 @@ drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv)
 				fb_id, flags, priv);
 		if (ret) {
 			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-					"flip queue failed: %s\n",
-					strerror(errno));
+					"flip queue failed: %s crtc %u fb %u \n",
+					strerror(errno), crtc->crtc_id, fb_id);
 			failed = 1;
 		} else
 			num_flipped += 1;
