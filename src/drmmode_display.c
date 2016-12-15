@@ -2225,28 +2225,34 @@ drmmode_uevent_fini(ScrnInfoPtr pScrn)
 static void
 drmmode_wakeup_handler(pointer data, int err, pointer p)
 {
-	int fd = (int)data;
+	ScrnInfoPtr pScrn = data;
+	struct drmmode_rec *drmmode;
+
 	fd_set *read_mask = p;
 
-	if (err < 0)
+	if (pScrn == NULL || err < 0)
 		return;
 
-	if (FD_ISSET(fd, read_mask))
-		drmHandleEvent(fd, &event_context);
+	drmmode = drmmode_from_scrn(pScrn);
+
+	if (FD_ISSET(drmmode->fd, read_mask))
+		drmHandleEvent(drmmode->fd, &event_context);
 }
 
-void drmmode_init_wakeup_handler(int fd)
+void drmmode_init_wakeup_handler(ScrnInfoPtr pScrn)
 {
-	AddGeneralSocket(fd);
+	struct drmmode_rec *drmmode = drmmode_from_scrn(pScrn);
+	AddGeneralSocket(drmmode->fd);
 	RegisterBlockAndWakeupHandlers((BlockHandlerProcPtr)NoopDDA,
-			drmmode_wakeup_handler, (pointer)fd);
+			drmmode_wakeup_handler, (pointer)pScrn);
 }
 
-void drmmode_fini_wakeup_handler(int fd)
+void drmmode_fini_wakeup_handler(ScrnInfoPtr pScrn)
 {
+	struct drmmode_rec *drmmode = drmmode_from_scrn(pScrn);
 	RemoveBlockAndWakeupHandlers((BlockHandlerProcPtr)NoopDDA,
-			drmmode_wakeup_handler, (pointer)fd);
-	RemoveGeneralSocket(fd);
+			drmmode_wakeup_handler, (pointer)pScrn);
+	RemoveGeneralSocket(drmmode->fd);
 }
 
 void
@@ -2259,15 +2265,13 @@ drmmode_wait_for_event(ScrnInfoPtr pScrn)
 void
 drmmode_screen_init(ScrnInfoPtr pScrn)
 {
-	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
 	drmmode_uevent_init(pScrn);
-	drmmode_init_wakeup_handler(pARMSOC);
+	drmmode_init_wakeup_handler(pScrn);
 }
 
 void
 drmmode_screen_fini(ScrnInfoPtr pScrn)
 {
-	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
 	drmmode_uevent_fini(pScrn);
-	drmmode_fini_wakeup_handler(pARMSOC);
+	drmmode_fini_wakeup_handler(pScrn);
 }
