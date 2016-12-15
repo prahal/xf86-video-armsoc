@@ -2259,11 +2259,15 @@ drmmode_wait_for_event(ScrnInfoPtr pScrn)
 void
 drmmode_screen_init(ScrnInfoPtr pScrn)
 {
+	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
 	drmmode_uevent_init(pScrn);
+	drmmode_init_wakeup_handler(pARMSOC);
 }
 
 void
 drmmode_screen_fini(ScrnInfoPtr pScrn)
 {
+	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
 	drmmode_uevent_fini(pScrn);
+	drmmode_fini_wakeup_handler(pARMSOC);
 }
