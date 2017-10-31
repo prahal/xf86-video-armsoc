@@ -38,6 +38,9 @@
 #include "xf86drm.h"
 #include <errno.h>
 #include "armsoc_exa.h"
+#ifdef XSERVER_PLATFORM_BUS
+#include "xf86platformBus.h"
+#endif
 
 /* Apparently not used by X server */
 #define ARMSOC_VERSION		1000

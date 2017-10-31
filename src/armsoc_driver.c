@@ -73,6 +73,10 @@ static void ARMSOCAdjustFrame(ADJUST_FRAME_ARGS_DECL);
 static Bool ARMSOCEnterVT(VT_FUNC_ARGS_DECL);
 static void ARMSOCLeaveVT(VT_FUNC_ARGS_DECL);
 static void ARMSOCFreeScreen(FREE_SCREEN_ARGS_DECL);
+#ifdef XSERVER_PLATFORM_BUS
+static Bool ARMSOCPlatformProbe(DriverPtr drv, int entity_num, int flags,
+		struct xf86_platform_device *dev, intptr_t match_data);
+#endif
 
 /**
  * A structure used by the XFree86 code when loading this driver, so that it
@@ -91,7 +95,10 @@ _X_EXPORT DriverRec ARMSOC = {
 		NULL,
 #ifdef XSERVER_LIBPCIACCESS
 		NULL,
-		NULL
+		NULL,
+#endif
+#ifdef XSERVER_PLATFORM_BUS
+		ARMSOCPlatformProbe,
 #endif
 };
 
@@ -281,8 +288,10 @@ static Bool
 ARMSOCOpenDRM(ScrnInfoPtr pScrn)
 {
 	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
+#ifndef XSERVER_PLATFORM_BUS
 	drmSetVersion sv;
 	int err;
+#endif
 
 	if (connection.fd < 0) {
 		assert(!connection.open_count);
@@ -290,6 +299,7 @@ ARMSOCOpenDRM(ScrnInfoPtr pScrn)
 		pARMSOC->drmFD = ARMSOCOpenDRMCard();
 		if (pARMSOC->drmFD < 0)
 			return FALSE;
+#ifndef XSERVER_PLATFORM_BUS
 		/* Check that what we are or can become drm master by
 		 * attempting a drmSetInterfaceVersion(). If successful
 		 * this leaves us as master.
@@ -306,6 +316,7 @@ ARMSOCOpenDRM(ScrnInfoPtr pScrn)
 			pARMSOC->drmFD = -1;
 			return FALSE;
 		}
+#endif
 		connection.fd = pARMSOC->drmFD;
 		connection.open_count = 1;
 		connection.master_count = 1;
@@ -375,7 +386,11 @@ ARMSOCSetup(pointer module, pointer opts, int *errmaj, int *errmin)
 	/* This module should be loaded only once, but check to be sure: */
 	if (!setupDone) {
 		setupDone = TRUE;
+#ifdef XSERVER_PLATFORM_BUS
+		xf86AddDriver(&ARMSOC, module, HaveDriverFuncs);
+#else
 		xf86AddDriver(&ARMSOC, module, 0);
+#endif
 
 		/* The return value must be non-NULL on success even
 		 * though there is no TearDownProc.
@@ -624,6 +639,7 @@ ARMSOCPreInit(ScrnInfoPtr pScrn, int flags)
 	rgb defaultWeight = { 0, 0, 0 };
 	rgb defaultMask = { 0, 0, 0 };
 	Gamma defaultGamma = { 0.0, 0.0, 0.0 };
+	EntityInfoPtr pEnt;
 	int driNumBufs;
 
 	TRACE_ENTER();
@@ -644,7 +660,8 @@ ARMSOCPreInit(ScrnInfoPtr pScrn, int flags)
 	}
 
 	pARMSOC = ARMSOCPTR(pScrn);
-	pARMSOC->pEntityInfo = xf86GetEntityInfo(pScrn->entityList[0]);
+	pEnt = xf86GetEntityInfo(pScrn->entityList[0]);
+	pARMSOC->pEntityInfo = pEnt;
 
 	pScrn->monitor = pScrn->confScreen->monitor;
 
@@ -691,6 +708,24 @@ ARMSOCPreInit(ScrnInfoPtr pScrn, int flags)
 	/* Open a connection to the DRM, so we can communicate
 	 * with the KMS code:
 	 */
+#ifdef XSERVER_PLATFORM_BUS
+	if (pEnt->location.type == BUS_PLATFORM) {
+		char *busid = xf86_get_platform_device_attrib(pEnt->location.id.plat,
+				ODEV_ATTRIB_BUSID);
+		/*
+		 * connection.driver_name and connection.card_num should go away
+		 * as connection.bus_id is defined.
+		 */
+		connection.bus_id = busid;
+		connection.driver_name = NULL;
+
+		;
+		if (!ARMSOCOpenDRM(pScrn))
+			goto fail;
+		pARMSOC->deviceName = drmGetDeviceNameFromFd(pARMSOC->drmFD);
+	}
+	else
+#endif
 	if (!ARMSOCOpenDRM(pScrn))
 		goto fail;
 
@@ -1302,3 +1337,63 @@ ARMSOCFreeScreen(FREE_SCREEN_ARGS_DECL)
 	TRACE_EXIT();
 }
 
+#ifdef XSERVER_PLATFORM_BUS
+static Bool
+ARMSOCPlatformProbe(DriverPtr drv, int entity_num, int flags,
+                   struct xf86_platform_device *dev, intptr_t match_data)
+{
+	ScrnInfoPtr pScrn = NULL;
+	struct ARMSOCRec *pARMSOC = NULL;
+	Bool foundScreen = FALSE;
+	char *busid = xf86_get_platform_device_attrib(dev, ODEV_ATTRIB_BUSID);
+	int fd;
+
+	fd = drmOpen(NULL, busid);
+	if (fd != -1) {
+		pScrn = xf86AllocateScreen(drv, 0);
+		if (!pScrn) {
+			EARLY_ERROR_MSG("Cannot allocate a ScrnInfoPtr");
+			drmClose(fd);
+			return FALSE;
+		}
+
+		/* Allocate the driver's Screen-specific, "private"
+		 * data structure and hook it into the ScrnInfoRec's
+		 * driverPrivate field.
+		 */
+		pScrn->driverPrivate =
+				calloc(1, sizeof(*pARMSOC));
+		if (!pScrn->driverPrivate)
+			return FALSE;
+
+		xf86AddEntityToScreen(pScrn, entity_num);
+
+		/* if there are multiple screens, use a separate
+		 * crtc for each one
+		 */
+		pARMSOC = ARMSOCPTR(pScrn);
+		pARMSOC->crtcNum = entity_num;
+		xf86Msg(X_INFO, "Screen:%d,  CRTC:%d\n",
+				pScrn->scrnIndex,
+				pARMSOC->crtcNum);
+
+		foundScreen = TRUE;
+
+		pScrn->driverVersion = ARMSOC_VERSION;
+		pScrn->driverName    = (char *)ARMSOC_DRIVER_NAME;
+		pScrn->name          = (char *)ARMSOC_NAME;
+		pScrn->Probe         = ARMSOCProbe;
+		pScrn->PreInit       = ARMSOCPreInit;
+		pScrn->ScreenInit    = ARMSOCScreenInit;
+		pScrn->SwitchMode    = ARMSOCSwitchMode;
+		pScrn->AdjustFrame   = ARMSOCAdjustFrame;
+		pScrn->EnterVT       = ARMSOCEnterVT;
+		pScrn->LeaveVT       = ARMSOCLeaveVT;
+		pScrn->FreeScreen    = ARMSOCFreeScreen;
+
+		drmClose(fd);
+	}
+
+	return foundScreen;
+}
+#endif
