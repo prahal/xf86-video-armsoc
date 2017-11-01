@@ -1233,10 +1233,14 @@ ARMSOCCloseScreen(CLOSE_SCREEN_ARGS_DECL)
 	drmmode_screen_fini(pScrn);
 	drmmode_cursor_fini(pScreen);
 
-	unwrap(pARMSOC, pScreen, CloseScreen);
+	if (pScrn->vtSema == TRUE)
+		ARMSOCLeaveVT(VT_FUNC_ARGS(0));
+
 	unwrap(pARMSOC, pScreen, BlockHandler);
 	unwrap(pARMSOC, pScreen, CreateScreenResources);
 
+	pScrn->vtSema = FALSE;
+	unwrap(pARMSOC, pScreen, CloseScreen);
 	ret = (*pScreen->CloseScreen)(CLOSE_SCREEN_ARGS);
 
 	if (pARMSOC->dri)
@@ -1253,10 +1257,6 @@ ARMSOCCloseScreen(CLOSE_SCREEN_ARGS_DECL)
 
 	pScrn->displayWidth = 0;
 
-	if (pScrn->vtSema == TRUE)
-		ARMSOCLeaveVT(VT_FUNC_ARGS(0));
-
-	pScrn->vtSema = FALSE;
 
 	TRACE_EXIT();
 
@@ -1344,6 +1344,8 @@ ARMSOCEnterVT(VT_FUNC_ARGS_DECL)
 			AttendClient(clients[i]);
 	}
 
+	pScrn->vtSema = TRUE;
+
 	ret = ARMSOCSetDRMMaster(pScrn);
 	if (ret) {
 		ERROR_MSG("Cannot get DRM master: %s", strerror(errno));
@@ -1378,6 +1380,8 @@ ARMSOCLeaveVT(VT_FUNC_ARGS_DECL)
 		if (clients[i] && !clients[i]->clientGone)
 			IgnoreClient(clients[i]);
 	}
+
+	pScrn->vtSema = FALSE;
 
 	ret = ARMSOCDropDRMMaster(pScrn);
 	if (ret)
