@@ -1425,6 +1425,9 @@ ARMSOCFreeScreen(FREE_SCREEN_ARGS_DECL)
 		pScrn->driverPrivate = NULL;
 	}
 
+	free(pARMSOC->pOptionInfo);
+	free(pARMSOC);
+
 	TRACE_EXIT();
 }
 
