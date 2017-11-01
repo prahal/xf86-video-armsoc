@@ -42,6 +42,8 @@
 
 #include "armsoc_driver.h"
 
+#include "xf86drmMode.h"
+
 #include "micmap.h"
 
 #include "xf86cmap.h"
@@ -77,6 +79,8 @@ static void ARMSOCFreeScreen(FREE_SCREEN_ARGS_DECL);
 static Bool ARMSOCPlatformProbe(DriverPtr drv, int entity_num, int flags,
 		struct xf86_platform_device *dev, intptr_t match_data);
 #endif
+static Bool ARMSOCDriverFunc(ScrnInfoPtr scrn, xorgDriverFuncOp op,
+		void *data);
 
 /**
  * A structure used by the XFree86 code when loading this driver, so that it
@@ -92,7 +96,7 @@ _X_EXPORT DriverRec ARMSOC = {
 		ARMSOCAvailableOptions,
 		NULL,
 		0,
-		NULL,
+		ARMSOCDriverFunc,
 #ifdef XSERVER_LIBPCIACCESS
 		NULL,
 		NULL,
@@ -139,9 +143,16 @@ static struct ARMSOCConnection {
 } connection = {NULL, NULL, 0, -1, 0, 0};
 
 static int
-ARMSOCSetDRMMaster(void)
+ARMSOCSetDRMMaster(ScrnInfoPtr pScrn)
 {
+	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
 	int ret = 0;
+
+#ifdef XF86_PDEV_SERVER_FD
+	if (pARMSOC->pEntityInfo->location.type == BUS_PLATFORM &&
+	    (pARMSOC->pEntityInfo->location.id.plat->flags & XF86_PDEV_SERVER_FD))
+		return 0;
+#endif
 
 	assert(connection.fd >= 0);
 
@@ -156,9 +167,16 @@ ARMSOCSetDRMMaster(void)
 }
 
 static int
-ARMSOCDropDRMMaster(void)
+ARMSOCDropDRMMaster(ScrnInfoPtr pScrn)
 {
+	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
 	int ret = 0;
+
+#ifdef XF86_PDEV_SERVER_FD
+	if (pARMSOC->pEntityInfo->location.type == BUS_PLATFORM &&
+	    (pARMSOC->pEntityInfo->location.id.plat->flags & XF86_PDEV_SERVER_FD))
+		return 0;
+#endif
 
 	assert(connection.fd >= 0);
 	assert(connection.master_count > 0);
@@ -293,6 +311,16 @@ ARMSOCOpenDRM(ScrnInfoPtr pScrn)
 	int err;
 #endif
 
+#ifdef XF86_PDEV_SERVER_FD
+	if (pARMSOC->pEntityInfo->location.type == BUS_PLATFORM &&
+	    (pARMSOC->pEntityInfo->location.id.plat->flags & XF86_PDEV_SERVER_FD))
+	{
+		pARMSOC->drmFD = xf86_get_platform_device_int_attrib(
+				pARMSOC->pEntityInfo->location.id.plat, ODEV_ATTRIB_FD, -1);
+		if (pARMSOC->drmFD < 0)
+			return FALSE;
+	} else
+#endif
 	if (connection.fd < 0) {
 		assert(!connection.open_count);
 		assert(!connection.master_count);
@@ -339,8 +367,16 @@ ARMSOCCloseDRM(ScrnInfoPtr pScrn)
 {
 	struct ARMSOCRec *pARMSOC = ARMSOCPTR(pScrn);
 
-	if (pARMSOC && (pARMSOC->drmFD >= 0)) {
-		drmFree(pARMSOC->deviceName);
+
+	if (!(pARMSOC && (pARMSOC->drmFD >= 0)))
+		return;
+
+	drmFree(pARMSOC->deviceName);
+#ifdef XF86_PDEV_SERVER_FD
+	if (!(pARMSOC->pEntityInfo->location.type == BUS_PLATFORM &&
+	    (pARMSOC->pEntityInfo->location.id.plat->flags & XF86_PDEV_SERVER_FD)))
+#endif
+	{
 		connection.open_count--;
 		connection.master_count--;
 		if (!connection.open_count) {
@@ -348,8 +384,8 @@ ARMSOCCloseDRM(ScrnInfoPtr pScrn)
 			drmClose(pARMSOC->drmFD);
 			connection.fd = -1;
 		}
-		pARMSOC->drmFD = -1;
 	}
+	pARMSOC->drmFD = -1;
 }
 
 /** Let the XFree86 code know the Setup() function. */
@@ -424,6 +460,33 @@ ARMSOCIdentify(int flags)
 	xf86Msg(X_INFO, "%s: Driver for ARM Mali compatible chipsets\n", ARMSOC_NAME);
 }
 
+static Bool ARMSOCProbeHardware(struct xf86_platform_device *platform_dev)
+{
+	int fd;
+
+
+#if XSERVER_PLATFORM_BUS
+#ifdef XF86_PDEV_SERVER_FD
+	if (platform_dev && (platform_dev->flags & XF86_PDEV_SERVER_FD)) {
+		fd = xf86_get_platform_device_int_attrib(platform_dev, ODEV_ATTRIB_FD, -1);
+		if (fd == -1)
+			return FALSE;
+		ARMSOCShowDriverInfo(fd);
+		return TRUE;
+	} else
+#else
+	connection.bus_id = xf86_get_platform_device_attrib(platform_dev, ODEV_ATTRIB_BUSID);
+#endif
+#endif
+
+	fd = ARMSOCOpenDRMCard();
+		if (fd != -1) {
+			drmClose(fd);
+		return TRUE;
+	}
+	return FALSE;
+}
+
 /**
  * The driver's Probe() function.  This function finds all instances of
  * ARM hardware that the driver supports (from within the "xorg.conf"
@@ -458,8 +521,6 @@ ARMSOCProbe(DriverPtr drv, int flags)
 	}
 
 	for (i = 0; i < numDevSections; i++) {
-		int fd;
-
 		if (devSections) {
 			const char *busIdStr;
 			const char *driverNameStr;
@@ -520,8 +581,7 @@ ARMSOCProbe(DriverPtr drv, int flags)
 				}
 			}
 		}
-		fd = ARMSOCOpenDRMCard();
-		if (fd >= 0) {
+		if (ARMSOCProbeHardware(NULL)) {
 			struct ARMSOCRec *pARMSOC;
 
 			/* Allocate the ScrnInfoRec */
@@ -529,7 +589,6 @@ ARMSOCProbe(DriverPtr drv, int flags)
 			if (!pScrn) {
 				EARLY_ERROR_MSG(
 						"Cannot allocate a ScrnInfoPtr");
-				drmClose(fd);
 				goto free_sections;
 			}
 			/* Allocate the driver's Screen-specific, "private"
@@ -553,7 +612,6 @@ ARMSOCProbe(DriverPtr drv, int flags)
 				xf86AddBusDeviceToConfigure(ARMSOC_DRIVER_NAME,
 						BUS_NONE, NULL, i);
 				foundScreen = TRUE;
-				drmClose(fd);
 				continue;
 			}
 
@@ -588,7 +646,6 @@ ARMSOCProbe(DriverPtr drv, int flags)
 			pScrn->FreeScreen    = ARMSOCFreeScreen;
 
 			/* would be nice to keep the connection open */
-			drmClose(fd);
 		}
 	}
 free_sections:
@@ -625,6 +682,25 @@ static struct drmmode_interface *get_drmmode_implementation(int drm_fd)
 
 	drmFreeVersion(version);
 	return ret;
+}
+
+static Bool
+ARMSOCDriverFunc(ScrnInfoPtr pScrn, xorgDriverFuncOp op, void *data)
+{
+	xorgHWFlags *flag;
+
+	switch (op) {
+	case GET_REQUIRED_HW_INTERFACES:
+		flag = (CARD32 *)data;
+		(*flag) = 0;
+		return TRUE;
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,15,99,902,0)
+	case SUPPORTS_SERVER_FDS:
+		return TRUE;
+#endif
+	default:
+		return FALSE;
+	}
 }
 
 /**
@@ -710,18 +786,28 @@ ARMSOCPreInit(ScrnInfoPtr pScrn, int flags)
 	 */
 #ifdef XSERVER_PLATFORM_BUS
 	if (pEnt->location.type == BUS_PLATFORM) {
-		char *busid = xf86_get_platform_device_attrib(pEnt->location.id.plat,
-				ODEV_ATTRIB_BUSID);
-		/*
-		 * connection.driver_name and connection.card_num should go away
-		 * as connection.bus_id is defined.
-		 */
-		connection.bus_id = busid;
-		connection.driver_name = NULL;
+#ifdef XF86_PDEV_SERVER_FD
+		if (pEnt->location.id.plat->flags & XF86_PDEV_SERVER_FD)
+		{
+			pARMSOC->drmFD = xf86_get_platform_device_int_attrib(
+				    pEnt->location.id.plat, ODEV_ATTRIB_FD, -1);
+			if (pARMSOC->drmFD < 0)
+				goto fail;
+		} else
+#endif
+		{
+			char *busid = xf86_get_platform_device_attrib(pEnt->location.id.plat,
+					ODEV_ATTRIB_BUSID);
+			/*
+			 * connection.driver_name and connection.card_num should go away
+			 * as connection.bus_id is defined.
+			 */
+			connection.bus_id = busid;
+			connection.driver_name = NULL;
 
-		;
-		if (!ARMSOCOpenDRM(pScrn))
-			goto fail;
+			if (!ARMSOCOpenDRM(pScrn))
+				goto fail;
+		}
 		pARMSOC->deviceName = drmGetDeviceNameFromFd(pARMSOC->drmFD);
 	}
 	else
@@ -834,7 +920,7 @@ ARMSOCPreInit(ScrnInfoPtr pScrn, int flags)
 fail2:
 	/* Cleanup here where we know whether we took a connection
 	 * instead of in FreeScreen where we don't */
-	ARMSOCDropDRMMaster();
+	ARMSOCDropDRMMaster(pScrn);
 	ARMSOCCloseDRM(pScrn);
 fail:
 	TRACE_EXIT();
@@ -885,7 +971,7 @@ ARMSOCScreenInit(SCREEN_INIT_ARGS_DECL)
 	pARMSOC->created_scanout_pixmap = FALSE;
 
 	/* set drm master before allocating scanout buffer */
-	if (ARMSOCSetDRMMaster()) {
+	if (ARMSOCSetDRMMaster(pScrn)) {
 		ERROR_MSG("Cannot get DRM master: %s", strerror(errno));
 		goto fail;
 	}
@@ -924,6 +1010,7 @@ ARMSOCScreenInit(SCREEN_INIT_ARGS_DECL)
 			((pScrn->bitsPerPixel+7) / 8);
 	xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 
+	/* Screen creates and takes a ref on the scanout bo */
 	/* need to point to new screen on server regeneration */
 	for (j = 0; j < xf86_config->num_crtc; j++)
 		xf86_config->crtc[j]->scrn = pScrn;
@@ -1257,7 +1344,7 @@ ARMSOCEnterVT(VT_FUNC_ARGS_DECL)
 			AttendClient(clients[i]);
 	}
 
-	ret = ARMSOCSetDRMMaster();
+	ret = ARMSOCSetDRMMaster(pScrn);
 	if (ret) {
 		ERROR_MSG("Cannot get DRM master: %s", strerror(errno));
 		return FALSE;
@@ -1292,7 +1379,7 @@ ARMSOCLeaveVT(VT_FUNC_ARGS_DECL)
 			IgnoreClient(clients[i]);
 	}
 
-	ret = ARMSOCDropDRMMaster();
+	ret = ARMSOCDropDRMMaster(pScrn);
 	if (ret)
 		WARNING_MSG("drmDropMaster failed: %s", strerror(errno));
 
@@ -1345,15 +1432,11 @@ ARMSOCPlatformProbe(DriverPtr drv, int entity_num, int flags,
 	ScrnInfoPtr pScrn = NULL;
 	struct ARMSOCRec *pARMSOC = NULL;
 	Bool foundScreen = FALSE;
-	char *busid = xf86_get_platform_device_attrib(dev, ODEV_ATTRIB_BUSID);
-	int fd;
 
-	fd = drmOpen(NULL, busid);
-	if (fd != -1) {
+	if (ARMSOCProbeHardware(dev)) {
 		pScrn = xf86AllocateScreen(drv, 0);
 		if (!pScrn) {
 			EARLY_ERROR_MSG("Cannot allocate a ScrnInfoPtr");
-			drmClose(fd);
 			return FALSE;
 		}
 
@@ -1390,8 +1473,6 @@ ARMSOCPlatformProbe(DriverPtr drv, int entity_num, int flags,
 		pScrn->EnterVT       = ARMSOCEnterVT;
 		pScrn->LeaveVT       = ARMSOCLeaveVT;
 		pScrn->FreeScreen    = ARMSOCFreeScreen;
-
-		drmClose(fd);
 	}
 
 	return foundScreen;
